@@ -1,0 +1,108 @@
+LMDB/*
+!LMDB/README
+
+weights/
+weights 2
+
+bin/foldseek
+
+dataset/siu_dataset.py
+dataset/tmp_siu_dataset.pkl
+
+example/*.pdb
+
+.idea/
+.idea/workspace.xml
+LMDB/.DS_Store
+.DS_Store
+
+weights
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+.env/
+*.venv/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Logs and debug files
+logs/
+*.log
+*.out
+*.err
+debug.log
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.sublime-workspace
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Test coverage reports
+htmlcov/
+.coverage
+.coverage.*
+.cache/
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+
+# Build and distribution
+build/
+dist/
+*.egg-info/
+*.manifest
+*.spec
+
+# PyInstaller
+*.spec
+__pycache__/
+
+# Pipenv
+Pipfile
+Pipfile.lock
+
+# mypy
+.mypy_cache/
+.dmypy.json
+.pyre/
+
+# Model & Data files (if working with ML)
+*.h5
+*.pth
+*.pkl
+*.pt
+*.ckpt
+*.onnx
+*.npy
+*.npz
+*.joblib
+
+# Large dataset files
+data/
+datasets/
+*.csv
+*.tsv
+*.json
+*.xml
+
+# Docker
+.dockerignore
+docker-compose.yml
+
+# Ignore environment files
+.envrc
+*.env
+
+# Ignore temporary Jupyter files
+*.ipynb_checkpoints
