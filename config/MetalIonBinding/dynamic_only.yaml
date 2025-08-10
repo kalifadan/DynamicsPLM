@@ -32,7 +32,8 @@ model:
     betas: [0.9, 0.98]
     weight_decay: 0.01
 
-  save_path: weights/MetalIonBinding/SaProt_650M_AF2.pt   # DynamicPLM_SHP_Embedding_Gate.pt
+  save_path: weights/MetalIonBinding/DynamicPLM_SHP_Embedding_Gate.pt
+#  save_path: weights/MetalIonBinding/SaProt_650M_AF2.pt
 
 
 dataset:

@@ -76,32 +76,23 @@ class SHPEmbeddingLayer(nn.Module):
                     j = self.struct_vocab_map[struct_tok]
                     self.full_embed.data[i, j] = pretrained_embedding[idx]
 
-        # Gating network: learn how much to use SHP vs token
         # self.gate_net = nn.Sequential(
-        #     nn.Linear(self.hidden_dim, self.hidden_dim),
-        #     nn.ReLU(),
-        #     nn.Linear(self.hidden_dim, 1),
-        #     nn.Sigmoid()
+        #     nn.LayerNorm(self.hidden_dim),  # Normalize input
+        #     nn.Linear(self.hidden_dim, self.hidden_dim),  # First projection
+        #     nn.GELU(),  # Smoother non-linearity
+        #     nn.Dropout(0.1),  # Add regularization
+        #     nn.Linear(self.hidden_dim, 1),  # Scalar gate output
+        #     nn.Sigmoid()  # Output in (0,1)
         # )
-        # self.gate_net[2].bias.data.fill_(-0.85)   # sigmoid(-0.85) ≈ 0.3
-
-        self.gate_net = nn.Sequential(
-            nn.LayerNorm(self.hidden_dim),  # Normalize input
-            nn.Linear(self.hidden_dim, self.hidden_dim),  # First projection
-            nn.GELU(),  # Smoother non-linearity
-            nn.Dropout(0.1),  # Add regularization
-            nn.Linear(self.hidden_dim, 1),  # Scalar gate output
-            nn.Sigmoid()  # Output in (0,1)
-        )
-        self.gate_net[4].bias.data.fill_(-0.85)
+        # self.gate_net[4].bias.data.fill_(-0.85)
+        #
+        self.avg_gate = 0
 
         # self.cross_attention = nn.MultiheadAttention(
         #     embed_dim=self.hidden_dim,
         #     num_heads=4,
         #     batch_first=True
         # )
-
-        self.avg_gate = 0
 
     def embed_token_by_id(self, token_id: int):
         token = self.index_to_token[token_id]
@@ -183,12 +174,12 @@ class SHPEmbeddingLayer(nn.Module):
         E_shp = (struct_embeds * shp_vals).sum(dim=1)  # (N, D)
 
         # Learn fusion via gate
-        gate = self.gate_net(E_token)  # (N, 1)
-        E_final = gate * E_shp + (1 - gate) * E_token  # (N, D)
-        # E_final = 0.5 * E_shp + 0.5 * E_token  # (N, D)
+        # gate = self.gate_net(E_token)  # (N, 1)
+        # E_final = gate * E_shp + (1 - gate) * E_token  # (N, D)
+        E_final = 0.5 * E_shp + 0.5 * E_token  # (N, D)
 
-        if self.training:  # Only log during training
-            self.avg_gate = gate.mean().item()
+        # if self.training:  # Only log during training
+        #     self.avg_gate = gate.mean().item()
 
         # SHP values used to modulate VALUE — not key/query
         # value = struct_embeds * shp_vals.unsqueeze(-1)  # (N, 20, D)

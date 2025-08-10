@@ -9,7 +9,7 @@ from ..data_interface import register_dataset
 
 
 @register_dataset
-class SaprotPPIDataset(LMDBDataset):
+class DynamicPLMPPIDataset(LMDBDataset):
     def __init__(self,
              tokenizer: str,
              max_length: int = 1024,
@@ -30,30 +30,29 @@ class SaprotPPIDataset(LMDBDataset):
         self.max_length = max_length
         self.plddt_threshold = plddt_threshold
 
-        self.proteins_without_ligands = []
-        self.proteins_with_ligands_ids = []
-        self.proteins_with_ligands_indexes = []
+        self.last_entry = None
 
     def __getitem__(self, index):
-        entry = json.loads(self._get(index))
+        try:
+            entry = json.loads(self._get(index))
+            if entry:
+                self.last_entry = entry
+        except Exception as e:
+            print(f"Skipping index {index}: {e}")
+            entry = self.last_entry if self.last_entry else json.loads(self._get(random.randint(0, len(self) - 1)))
+
         seq_1, seq_2 = entry['seq_1'], entry['seq_2']
+        dynamic_features = {}
 
-        # Ligands Extraction
-        uniprot_id_1, ligand_list_1 = entry['name_1'], []
-        ligand_list_1 = self.pdbbind_df[self.pdbbind_df['uniprot_id'] == uniprot_id_1][["smiles", "value", "ic50",
-                                                                                        "kd", "ki", "type"]].values.tolist()
-        protein_type = [item[5] for item in ligand_list_1]
-        protein_type = "Unknown" if len(protein_type) == 0 else protein_type[0]
-        ligand_list_1 = [(item[0], [item[1], item[2], item[3], item[4]]) for item in ligand_list_1]
-        information_list_1 = [uniprot_id_1, protein_type]
+        if "shp_1" in entry:
+            dynamic_features["shp_1"] = entry["shp_1"]
+        else:
+            print("Found empty shp values for protein: ", entry["name_1"])
 
-        uniprot_id_2, ligand_list_2 = entry['name_2'], []
-        ligand_list_2 = self.pdbbind_df[self.pdbbind_df['uniprot_id'] == uniprot_id_2][["smiles", "value", "ic50",
-                                                                                        "kd", "ki", "type"]].values.tolist()
-        protein_type = [item[5] for item in ligand_list_2]
-        protein_type = "Unknown" if len(protein_type) == 0 else protein_type[0]
-        ligand_list_2 = [(item[0], [item[1], item[2], item[3], item[4]]) for item in ligand_list_2]
-        information_list_2 = [uniprot_id_2, protein_type]
+        if "shp_2" in entry:
+            dynamic_features["shp_2"] = entry["shp_2"]
+        else:
+            print("Found empty shp values for protein: ", entry["name_2"])
 
         # Mask structure tokens with pLDDT < threshold
         if self.plddt_threshold is not None:
@@ -80,13 +79,13 @@ class SaprotPPIDataset(LMDBDataset):
         tokens = self.tokenizer.tokenize(seq_2)[:self.max_length]
         seq_2 = " ".join(tokens)
 
-        return seq_1, seq_2, int(entry["label"]), ligand_list_1, ligand_list_2, information_list_1, information_list_2
+        return seq_1, seq_2, int(entry["label"]), dynamic_features
 
     def __len__(self):
         return int(self._get("length"))
 
     def collate_fn(self, batch):
-        seqs_1, seqs_2, label_ids, ligand_list_1, ligand_list_2, information_list_1, information_list_2 = tuple(zip(*batch))
+        seqs_1, seqs_2, label_ids, dynamic_features = tuple(zip(*batch))
 
         label_ids = torch.tensor(label_ids, dtype=torch.long)
         labels = {"labels": label_ids}
@@ -96,10 +95,5 @@ class SaprotPPIDataset(LMDBDataset):
         inputs = {"inputs_1": encoder_info_1,
                   "inputs_2": encoder_info_2}
 
-        ligands = {"ligands_1": ligand_list_1,
-                   "ligands_2": ligand_list_2}
-
-        info = {"protein_1": information_list_1,
-                "protein_2": information_list_2}
-
-        return inputs, labels, ligands, info
+        # Batch size is always 1, so we take the [0] element
+        return inputs, labels, dynamic_features[0], None

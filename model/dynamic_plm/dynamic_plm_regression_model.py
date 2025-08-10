@@ -54,11 +54,6 @@ class DynamicPLMRegressionModel(SaprotBaseModel):
             shp = F.softmax(shp_logits, dim=-1)
             self.shp_wrapper.set_shp_tensor(shp)
 
-            shp_sums = shp.sum(dim=-1)
-            if not torch.allclose(shp_sums, torch.ones_like(shp_sums), atol=1e-3):
-                max_diff = (shp_sums - 1).abs().max().item()
-                print(f"[SHP CHECK] Some SHP distributions do not sum to 1 (max error: {max_diff:.5f})")
-
         else:
             self.shp_wrapper.set_shp_tensor(None)
 

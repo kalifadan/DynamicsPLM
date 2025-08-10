@@ -25,7 +25,7 @@ def run(config):
     trainer = load_trainer(config)
 
     # Train and validate
-    trainer.fit(model=model, datamodule=data_module)
+    # trainer.fit(model=model, datamodule=data_module)
 
     # Load best model and test performance
     if model.save_path is not None:

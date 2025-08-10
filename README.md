@@ -10,10 +10,19 @@ python scripts/training.py -c config/DeepLoc/cls2/dynamic_plm.yaml
 python scripts/training.py -c config/MetalIonBinding/dynamic_plm.yaml
 python scripts/training.py -c config/EC/dynamic_plm.yaml
 python scripts/training.py -c config/GO/CC/dynamic_plm.yaml
+python scripts/training.py -c config/HumanPPI/dynamic_plm.yaml
+python scripts/training.py -c config/HumanPPI/dynamic_plm.yaml
+python scripts/training.py -c config/Contact/dynamic_plm.yaml
 
 # Only Dynamic
 python scripts/training.py -c config/MetalIonBinding/dynamic_only.yaml
 python scripts/training.py -c config/DeepLoc/cls10/dynamic_only.yaml
+python scripts/training.py -c config/DeepLoc/cls2/dynamic_only.yaml
+python scripts/training.py -c config/EC/dynamic_only.yaml
+python scripts/training.py -c config/Thermostability/dynamic_only.yaml
+
+python scripts/training.py -c config/EC/saprot.yaml
+
 
 # ESM-3 Access
 huggingface-cli login

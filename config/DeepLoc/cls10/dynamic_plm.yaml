@@ -33,7 +33,6 @@ model:
     weight_decay: 0.01
 
   save_path: weights/DeepLoc/cls10/DynamicPLM_SHP_Embedding_Gate.pt
-#  save_path: weights/DeepLoc/cls10/DynamicPLM_SHP_Embedding_test.pt
 
 dataset:
 #    Arguments to initialize the basic class LMDBDataset

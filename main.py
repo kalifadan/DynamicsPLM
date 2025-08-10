@@ -4,9 +4,9 @@ import os
 import lmdb
 import json
 import torch
-from rocketshp import RocketSHP, load_sequence, load_structure
-from biotite.structure.io import pdb
-from biotite.structure import to_sequence
+# from rocketshp import RocketSHP, load_sequence, load_structure
+# from biotite.structure.io import pdb
+# from biotite.structure import to_sequence
 import pandas as pd
 
 
@@ -211,7 +211,9 @@ def create_dataset_from_lmdb(path):
                     data = json.loads(value.decode("utf-8"))
                     if isinstance(data, int) or isinstance(value, int):
                         continue
-                    uniprot_id = data.get("name").split("-")[1]
+
+                    uniprot_id = data.get("name")
+                    uniprot_id = uniprot_id if "-" not in uniprot_id else uniprot_id.split("-")[1]
 
                     if uniprot_id:
                         save_path = f"example/{uniprot_id}.pdb"
@@ -249,7 +251,7 @@ def create_dataset_from_lmdb(path):
     return entries
 
 
-# for task in ["GO/AF2/CC"]:
+# for task in ["Contact"]:
 #     for split in ["test", "valid", "train"]:
 #         lmdb_path = f"LMDB/{task}/foldseek/{split}"
 #         print(f"\n🔄 Processing {task} {split} set from {lmdb_path}...")
@@ -272,6 +274,8 @@ def filter_multiconf_entries(lmdb_path, multiconf_uniprot_ids):
     env = lmdb.open(lmdb_path, readonly=True, lock=False)
     with env.begin() as txn:
         for key, value in txn.cursor():
+            if key == b"length" or key == b"info":
+                continue
             total += 1
             try:
                 data = json.loads(value.decode('utf-8'))
@@ -280,14 +284,16 @@ def filter_multiconf_entries(lmdb_path, multiconf_uniprot_ids):
                     errors += 1
                     continue
 
-                uid = data.get("name", None)        # .split("-")[1]
-                if uid is None:
+                uniprot_id = data.get("name", None)
+                uniprot_id = uniprot_id if "-" not in uniprot_id else uniprot_id.split("-")[1]
+
+                if uniprot_id is None:
                     print(f"⚠️ Missing UniProt ID in key = {key}")
                     missing_uniprot += 1
                     continue
 
-                if uid in multiconf_uniprot_ids:
-                    print(f"protein {uid} is a multi-conformation protein")
+                if uniprot_id in multiconf_uniprot_ids:
+                    # print(f"protein {uid} is a multi-conformation protein")
                     filtered_entries.append(data)
 
             except Exception as e:
@@ -306,14 +312,18 @@ def create_humanppi_dataset_from_lmdb(path):
     with lmdb.open(path, readonly=True, lock=False) as env:
         with env.begin() as txn:
             for key, value in txn.cursor():
-                if key == b"length":
+                if key == b"length" or key == b"info":
                     continue
                 try:
                     data = json.loads(value.decode("utf-8"))
                     if isinstance(data, int) or isinstance(value, int):
                         continue
-                    uniprot_id_1 = data.get("name_1")  # .split("-")[1]
-                    uniprot_id_2 = data.get("name_2")  # .split("-")[1]
+
+                    uniprot_id_1 = data.get("name_1")
+                    uniprot_id_2 = data.get("name_2")
+
+                    uniprot_id_1 = uniprot_id_1 if "-" not in uniprot_id_1 else uniprot_id_1.split("-")[1]
+                    uniprot_id_2 = uniprot_id_2 if "-" not in uniprot_id_2 else uniprot_id_2.split("-")[1]
 
                     for uniprot_id in [uniprot_id_1, uniprot_id_2]:
                         if uniprot_id:
@@ -356,7 +366,7 @@ def create_humanppi_dataset_from_lmdb(path):
 
 
 # for task in ["HumanPPI"]:
-#     for split in ["test", "valid", "train"]:
+#     for split in ["train"]:
 #         lmdb_path = f"LMDB/{task}/foldseek/{split}"
 #         print(f"\n🔄 Processing {task} {split} set from {lmdb_path}...")
 #
@@ -369,31 +379,60 @@ def create_humanppi_dataset_from_lmdb(path):
 #         print(f"💾 Saved enhanced dataset to {save_path}")
 
 
-# # Load CoDNaS-Q and extract multiconformation UniProt IDs
-# df = pd.read_csv("clusters_codnasQ.csv", sep=';')
-#
-# # Keep relevant columns only
-# df = df[['Query_UniProt_ID', 'Target_UniProt_ID', 'RMSD']]
-#
-# # Threshold for defining meaningful structural diversity
-# thr = 0         # TODO  1.5  # Å
-# mask = df['RMSD'] > thr
-# subset = df[mask]
-#
-# # Set of UniProt IDs with >1 conformation AND RMSD > threshold
-# multiconf_ids = set(subset['Query_UniProt_ID']).union(subset['Target_UniProt_ID'])
-# print(f"🧬 {len(multiconf_ids):,} UniProt entries have multiple conformers with RMSD > {thr} Å.")
-#
-# task = "DeepLoc/cls10"
-# split = "test"
-# lmdb_path = f"LMDB/{task}/dynamic/{split}"
-# print(f"\n🔄 Processing {task} {split} set from {lmdb_path}...")
-#
-# entries = filter_multiconf_entries(lmdb_path, multiconf_ids)
-# os.makedirs(f"LMDB/{task}/dynamic_only/{split}", exist_ok=True)
-# save_lmdb(entries, f"LMDB/{task}/dynamic_only/{split}")
-# print(f"💾 Saved multiconformation-only dataset!")
+# Load CoDNaS-Q and extract multiconformation UniProt IDs
+df = pd.read_csv("clusters_codnasQ.csv", sep=';')
+
+# Keep relevant columns only
+df = df[['Query_UniProt_ID', 'Target_UniProt_ID', 'RMSD']]
+
+# Threshold for defining meaningful structural diversity
+min_thr = 0.1  # Å
+max_thr = 1  # Å
+mask = (df['RMSD'] >= min_thr) & (df['RMSD'] < max_thr)
+subset = df[mask]
+
+# Set of UniProt IDs with >1 conformation AND RMSD > threshold
+multiconf_ids = set(subset['Query_UniProt_ID']).union(subset['Target_UniProt_ID'])
+print(f"🧬 {len(multiconf_ids):,} UniProt entries have multiple conformers with RMSD in range.")
+
+summary = {}
+"HumanPPI"
+for task in ["EC/AF2", "MetalIonBinding/AF2", "DeepLoc/cls2", "DeepLoc/cls10"]:
+    summary[task] = {}
+    for split in ["test"]:      # , "valid", "train"]:
+        lmdb_path = f"LMDB/{task}/dynamic/{split}"
+        print(f"\n🔄 Processing {task} {split} set from {lmdb_path}...")
+
+        entries = filter_multiconf_entries(lmdb_path, multiconf_ids)
+        count = len(entries)
+        print(f"✅ Found {count} multiconformer proteins")
+
+        summary[task][split] = count
+
+        os.makedirs(f"LMDB/{task}/dynamic_only/{split}", exist_ok=True)
+        save_lmdb(entries, f"LMDB/{task}/dynamic_only/{split}")
+        print(f"💾 Saved Multi-conformation only dataset!")
+
+# Print final summary table
+print("\n📊 Summary of multiconformer proteins per task and split:")
+print("{:<25} {:>8} {:>8} {:>8} {:>8}".format("Task", "Test", "Valid", "Train", "Total"))
+print("-" * 60)
+for task, splits in summary.items():
+    test = splits.get("test", 0)
+    valid = splits.get("valid", 0)
+    train = splits.get("train", 0)
+    total = test + valid + train
+    print("{:<25} {:>8} {:>8} {:>8} {:>8}".format(task, test, valid, train, total))
 
 
-
-
+# for task in ["EC/AF2", "MetalIonBinding/AF2", "Thermostability", "DeepLoc/cls2", "DeepLoc/cls10"]:
+#     for split in ["test"]:       # , "valid", "train"]:
+#         lmdb_path = f"LMDB/{task}/dynamic/{split}"
+#         print(f"\n🔄 Processing {task} {split} set from {lmdb_path}...")
+#
+#         entries = filter_multiconf_entries(lmdb_path, multiconf_ids)
+#         print(f"Found {len(entries)} in total")
+#
+#         os.makedirs(f"LMDB/{task}/dynamic_only/{split}", exist_ok=True)
+#         save_lmdb(entries, f"LMDB/{task}/dynamic_only/{split}")
+#         print(f"💾 Saved multiconformation-only dataset!")

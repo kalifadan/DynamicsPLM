@@ -7,11 +7,11 @@ from torch.nn import Linear, ReLU, Sequential, Sigmoid
 import torch.nn.functional as F
 from torch.nn.functional import cross_entropy, cosine_similarity
 from ..model_interface import register_model
-from .base import SaprotBaseModel
+from .base import SaprotBaseModel, SHPEmbeddingLayer, SHPWrapper
 
 
 @register_model
-class SaprotPPIModel(SaprotBaseModel):
+class DynamicPLMPPIModel(SaprotBaseModel):
     def __init__(self, test_result_path: str = None, **kwargs):
         """
         Args:
@@ -19,6 +19,20 @@ class SaprotPPIModel(SaprotBaseModel):
         """
         super().__init__(task="base", **kwargs)
         self.test_result_path = test_result_path
+
+        # SHP Embedding layer
+        pretrained_weights = self.model.esm.embeddings.word_embeddings.weight.data.clone()
+        vocab_path = f"{self.config_path}/vocab.txt"
+
+        # Initialize SHP embedding
+        self.shp_embedding_layer = SHPEmbeddingLayer(vocab_file=vocab_path,
+                                                     pretrained_embedding=pretrained_weights)
+
+        # Register temp buffer for SHP
+        self.current_shp_tensor = None  # This will be set in forward()
+
+        self.shp_wrapper = SHPWrapper(self.shp_embedding_layer)
+        self.model.esm.embeddings.word_embeddings = self.shp_wrapper
 
     def initialize_model(self):
         super().initialize_model()
@@ -37,45 +51,28 @@ class SaprotPPIModel(SaprotBaseModel):
                 f"{stage}_auroc": torchmetrics.AUROC(task="binary")
                }
 
-    def forward(self, inputs_1, inputs_2, ligands=None):
+    def forward(self, inputs_1, inputs_2, dynamic_features=None):
         if self.freeze_backbone:
-            hidden_1 = torch.stack(self.get_hidden_states(inputs_1, reduction="mean"))
-            hidden_2 = torch.stack(self.get_hidden_states(inputs_2, reduction="mean"))
-        else:
-            hidden_1 = self.model.esm(**inputs_1)[0][:, 0, :]
-            hidden_2 = self.model.esm(**inputs_2)[0][:, 0, :]
+            # To be implemented
+            raise NotImplementedError
 
-        # if [] not in ligands['ligands_1']:
-        #     ligands_embeddings_1, ligands_labels_1 = self.process_ligands(ligands['ligands_1'])
-        #     ligands_embeddings_1 = ligands_embeddings_1.squeeze(0)
-        # else:
-        #     ligands_embeddings_1 = self.ligand_generator(hidden_1)
-        # 
-        # if [] not in ligands['ligands_2']:
-        #     ligands_embeddings_2, ligands_labels_2 = self.process_ligands(ligands['ligands_2'])
-        #     ligands_embeddings_2 = ligands_embeddings_2.squeeze(0)
-        # else:
-        #     ligands_embeddings_2 = self.ligand_generator(hidden_2)
-        # 
-        # # Apply cross-attention (Protein as Query, Ligands as Key/Value)
-        # ligands_embeddings_1 = self.ligand_proj(ligands_embeddings_1)  # [batch, ligand_dim] → [batch, hidden_dim]
-        # 
-        # attn_output_1, _ = self.cross_attention(
-        #     query=hidden_1,  # Protein embeddings
-        #     key=ligands_embeddings_1,
-        #     value=ligands_embeddings_1
-        # )
-        # hidden_1 = hidden_1 + attn_output_1  # Residual connection
-        # 
-        # # Apply cross-attention (Protein as Query, Ligands as Key/Value)
-        # ligands_embeddings_2 = self.ligand_proj(ligands_embeddings_2)  # [batch, ligand_dim] → [batch, hidden_dim]
-        # 
-        # attn_output_2, _ = self.cross_attention(
-        #     query=hidden_2,  # Protein embeddings
-        #     key=ligands_embeddings_2,
-        #     value=ligands_embeddings_2
-        # )
-        # hidden_2 = hidden_2 + attn_output_2  # Residual connection
+        if dynamic_features is not None and "shp_1" in dynamic_features:
+            shp_logits = torch.tensor(dynamic_features["shp_1"], dtype=torch.float32, device=inputs_1["input_ids"].device)
+            shp = F.softmax(shp_logits, dim=-1)
+            self.shp_wrapper.set_shp_tensor(shp)
+        else:
+            self.shp_wrapper.set_shp_tensor(None)
+
+        hidden_1 = self.model.esm(**inputs_1)[0][:, 0, :]
+
+        if dynamic_features is not None and "shp_2" in dynamic_features:
+            shp_logits = torch.tensor(dynamic_features["shp_2"], dtype=torch.float32, device=inputs_2["input_ids"].device)
+            shp = F.softmax(shp_logits, dim=-1)
+            self.shp_wrapper.set_shp_tensor(shp)
+        else:
+            self.shp_wrapper.set_shp_tensor(None)
+
+        hidden_2 = self.model.esm(**inputs_2)[0][:, 0, :]
 
         hidden_concat = torch.cat([hidden_1, hidden_2], dim=-1)
         return self.model.classifier(hidden_concat)
@@ -109,6 +106,7 @@ class SaprotPPIModel(SaprotBaseModel):
         if stage == "train":
             log_dict = self.get_log_dict("train")
             log_dict["train_loss"] = loss
+            log_dict["avg_gate"] = self.shp_embedding_layer.avg_gate
             self.log_info(log_dict)
 
             # Reset train metrics

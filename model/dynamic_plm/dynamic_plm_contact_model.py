@@ -10,7 +10,7 @@ from .base import SaprotBaseModel
 
 
 @register_model
-class SaprotContactModel(SaprotBaseModel):
+class DynamicPLMContactModel(SaprotBaseModel):
     def __init__(self, **kwargs):
         """
         Args:
@@ -22,10 +22,8 @@ class SaprotContactModel(SaprotBaseModel):
     def initialize_model(self):
         super().initialize_model()
 
-        # hidden_size = self.model.config.hidden_size * 2
         hidden_size = self.model.config.num_attention_heads
-        # hidden_size = self.model.config.num_hidden_layers * self.model.config.num_attention_heads
-        
+
         classifier = torch.nn.Sequential(
             # Linear(hidden_size, hidden_size),
             # ReLU(),
@@ -46,33 +44,18 @@ class SaprotContactModel(SaprotBaseModel):
 
         return metric_dict
 
-    def forward(self, inputs, ligands=None):
-        # inputs["output_hidden_states"] = True
-        # outputs = self.model.esm(**inputs)
-        #
-        # hidden_states = outputs["hidden_states"][-1]
-        # prod = hidden_states[:, :, None, :] * hidden_states[:, None, :, :]
-        # diff = hidden_states[:, :, None, :] - hidden_states[:, None, :, :]
-        # pairwise_features = torch.cat((prod, diff), -1)
-        # pairwise_features = (pairwise_features + pairwise_features.transpose(1, 2)) / 2
-        #
-        # logits = self.model.classifier(pairwise_features)
-        # logits = logits[:, 1: -1, 1: -1].contiguous()
-        #
-        # return logits
-
+    def forward(self, inputs, dynamic_features=None):
         inputs["output_attentions"] = True
         outputs = self.model.esm(**inputs)
 
         attention_maps = torch.cat(outputs["attentions"][-1:], 1).permute(0, 2, 3, 1)
-        # attention_maps = torch.cat(outputs["attentions"], 1).permute(0, 2, 3, 1)
         attention_maps = (attention_maps + attention_maps.transpose(1, 2)) / 2
         logits = self.model.classifier(attention_maps)
         logits = logits[:, 1: -1, 1: -1].contiguous()
 
         return logits
 
-    def loss_func(self, stage, logits, labels, inputs=None, ligands=None, info=None):
+    def loss_func(self, stage, logits, labels, inputs=None, info=None):
         lengths = labels["lengths"]
         targets = labels["targets"].to(logits.device)
         loss = cross_entropy(logits.view(-1, logits.size(-1)), targets.flatten(), ignore_index=-1)

@@ -31,7 +31,7 @@ def pad_sequences(sequences, constant_value=0, dtype=None) -> np.ndarray:
 
 
 @register_dataset
-class SaprotContactDataset(LMDBDataset):
+class DynamicPLMContactDataset(LMDBDataset):
     def __init__(self,
                  tokenizer: str,
                  max_length: int = 1024,
@@ -46,10 +46,25 @@ class SaprotContactDataset(LMDBDataset):
         self.tokenizer = EsmTokenizer.from_pretrained(tokenizer)
         self.max_length = max_length
 
+        self.last_entry = None
+
     def __getitem__(self, index):
-        entry = json.loads(self._get(index))
+        try:
+            entry = json.loads(self._get(index))
+            if entry:
+                self.last_entry = entry
+        except Exception as e:
+            print(f"Skipping index {index}: {e}")
+            entry = self.last_entry if self.last_entry else json.loads(self._get(random.randint(0, len(self) - 1)))
 
         seq = entry['seq']
+        dynamic_features = {}
+
+        if "shp" in entry:
+            dynamic_features["shp"] = entry["shp"]
+        else:
+            print("Found empty shp values for protein: ", entry["name"])
+
         tokens = self.tokenizer.tokenize(seq)[:self.max_length]
         seq = " ".join(tokens)
 
@@ -62,13 +77,13 @@ class SaprotContactDataset(LMDBDataset):
         invalid_mask |= np.abs(y_inds - x_inds) < 6
         contact_map[invalid_mask] = -1
 
-        return seq, contact_map, len(contact_map)
+        return seq, contact_map, len(contact_map), dynamic_features
 
     def __len__(self):
         return int(self._get("length"))
 
     def collate_fn(self, batch):
-        seqs, contact_maps, lengths = tuple(zip(*batch))
+        seqs, contact_maps, lengths, dynamic_features = tuple(zip(*batch))
 
         encoder_info = self.tokenizer.batch_encode_plus(seqs, return_tensors='pt', padding=True)
         inputs = {"inputs": encoder_info}
@@ -77,4 +92,4 @@ class SaprotContactDataset(LMDBDataset):
         targets = torch.tensor(contact_maps, dtype=torch.long)
         labels = {"targets": targets, "lengths": lengths}
 
-        return inputs, labels, None, None
+        return inputs, labels, dynamic_features[0], None
