@@ -33,7 +33,7 @@ model:
     weight_decay: 0.01
 
   save_path: weights/EC/DynamicPLM_SHP_Embedding.pt
-
+  test_result_path: results/EC/DynamicPLM.csv
 
 dataset:
 #    Arguments to initialize the basic class LMDBDataset
@@ -44,7 +44,7 @@ dataset:
 
   train_lmdb: LMDB/EC/AF2/dynamic/train
   valid_lmdb: LMDB/EC/AF2/dynamic/valid
-  test_lmdb: LMDB/EC/AF2/dynamic_only/test
+  test_lmdb: LMDB/EC/AF2/dynamic/test    # TODO: dynamic_only
 #    Arguments to initialize the specific class
   kwargs:
     tokenizer: weights/PLMs/SaProt_650M_AF2

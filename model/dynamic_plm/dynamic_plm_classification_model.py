@@ -1,5 +1,6 @@
 import torchmetrics
 import torch
+import os
 
 import torch.nn as nn
 import torch.nn.functional as F
@@ -11,13 +12,14 @@ from .base import SaprotBaseModel, SHPEmbeddingLayer, SHPWrapper
 
 @register_model
 class DynamicPLMClassificationModel(SaprotBaseModel):
-    def __init__(self, num_labels: int, **kwargs):
+    def __init__(self, num_labels: int, test_result_path: str = None, **kwargs):
         """
         Args:
             num_labels: number of labels
             **kwargs: other arguments for SaprotBaseModel
         """
         self.num_labels = num_labels
+        self.test_result_path = test_result_path
         super().__init__(task="classification", **kwargs)
 
         # SHP Embedding layer
@@ -60,6 +62,14 @@ class DynamicPLMClassificationModel(SaprotBaseModel):
         label = labels['labels']
         task_loss = cross_entropy(logits, label)
         loss = task_loss
+
+        if stage == "test" and self.test_result_path is not None:
+            os.makedirs(os.path.dirname(self.test_result_path), exist_ok=True)
+            with open(self.test_result_path, 'a') as w:
+                uniprot_id = info[0]
+                probs = F.softmax(logits, dim=1).squeeze().tolist()
+                probs_str = "\t".join([f"{p:.4f}" for p in probs])
+                w.write(f"{uniprot_id}\t{probs_str}\t{label.item()}\n")
 
         # Update metrics
         # for metric in self.metrics[stage].values():

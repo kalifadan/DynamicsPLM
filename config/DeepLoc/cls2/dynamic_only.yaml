@@ -32,8 +32,11 @@ model:
     betas: [0.9, 0.98]
     weight_decay: 0.01
 
-#   save_path: weights/DeepLoc/cls2/DynamicPLM_SHP_Embedding.pt
-  save_path: weights/DeepLoc/cls2/SaProt_650M_AF2.pt
+#  save_path: weights/DeepLoc/cls2/SaProt_650M_AF2.pt
+#  test_result_path: results/DeepLoc/cls2/SaProt.csv
+
+  save_path: weights/DeepLoc/cls2/DynamicPLM_SHP_Embedding.pt
+  test_result_path: results/DeepLoc/cls2/DynamicPLM.csv
 
 dataset:
 #    Arguments to initialize the basic class LMDBDataset
@@ -44,7 +47,7 @@ dataset:
 
   train_lmdb: LMDB/DeepLoc/cls2/dynamic/train
   valid_lmdb: LMDB/DeepLoc/cls2/dynamic/valid
-  test_lmdb: LMDB/DeepLoc/cls2/dynamic_only/test
+  test_lmdb: LMDB/DeepLoc/cls2/dynamic/test     # TODO: dynamic_only
 
   #    Arguments to initialize the specific class
   kwargs:

@@ -3,6 +3,7 @@ import json
 import numpy as np
 import pickle
 import random
+import torch
 
 from torch.utils.data import Subset
 from transformers import EsmTokenizer
@@ -94,10 +95,10 @@ class SaprotAnnotationDataset(LMDBDataset):
         if isinstance(label, str):
             label = json.loads(label)
         
-        return seq, label, coords, dynamic_features
+        return seq, label, coords, dynamic_features, data['name']
 
     def collate_fn(self, batch):
-        seqs, labels, coords, dynamic_features = zip(*batch)
+        seqs, labels, coords, dynamic_features, info = zip(*batch)
 
         model_inputs = self.tokenizer.batch_encode_plus(seqs, return_tensors='pt', padding=True)
         inputs = {"inputs": model_inputs}
@@ -107,7 +108,7 @@ class SaprotAnnotationDataset(LMDBDataset):
 
         labels = {"labels": torch.tensor(labels, dtype=torch.long)}
         
-        return inputs, labels, dynamic_features[0], None
+        return inputs, labels, dynamic_features[0], info
     
     def __len__(self):
         return int(self._get('length'))

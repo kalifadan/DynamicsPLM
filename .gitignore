@@ -1,6 +1,8 @@
 LMDB/*
 !LMDB/README
 
+results
+
 weights/
 weights 2
 

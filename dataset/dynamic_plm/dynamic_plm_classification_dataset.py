@@ -95,13 +95,13 @@ class DynamicPLMClassificationDataset(LMDBDataset):
 
         label = entry["label"] if self.preset_label is None else self.preset_label
 
-        return seq, label, coords, dynamic_features
+        return seq, label, coords, dynamic_features, entry['name']
 
     def __len__(self):
         return int(self._get("length"))
 
     def collate_fn(self, batch):
-        seqs, label_ids, coords, dynamic_features = tuple(zip(*batch))
+        seqs, label_ids, coords, dynamic_features, info = tuple(zip(*batch))
 
         label_ids = torch.tensor(label_ids, dtype=torch.long)
         labels = {"labels": label_ids}
@@ -111,4 +111,4 @@ class DynamicPLMClassificationDataset(LMDBDataset):
         if self.use_bias_feature:
             inputs["coords"] = coords
 
-        return inputs, labels, dynamic_features[0], None
+        return inputs, labels, dynamic_features[0], info

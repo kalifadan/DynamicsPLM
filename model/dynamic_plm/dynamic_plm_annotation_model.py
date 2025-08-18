@@ -1,6 +1,6 @@
 import torchmetrics
 import torch
-
+import os
 
 from torch.nn.functional import binary_cross_entropy_with_logits
 import torch.nn.functional as F
@@ -11,7 +11,7 @@ from .base import SaprotBaseModel, SHPEmbeddingLayer, SHPWrapper
 
 @register_model
 class DynamicPLMAnnotationModel(SaprotBaseModel):
-    def __init__(self, anno_type: str, **kwargs):
+    def __init__(self, anno_type: str, test_result_path: str = None, **kwargs):
         """
         Args:
             anno_type: one of EC, GO, GO_MF, GO_CC
@@ -19,6 +19,7 @@ class DynamicPLMAnnotationModel(SaprotBaseModel):
         """
         label2num = {"EC": 585, "GO_BP": 1943, "GO_MF": 489, "GO_CC": 320}
         self.num_labels = label2num[anno_type]
+        self.test_result_path = test_result_path
         super().__init__(task="classification", **kwargs)
 
         # SHP Embedding layer
@@ -56,12 +57,21 @@ class DynamicPLMAnnotationModel(SaprotBaseModel):
 
         return self.model(**inputs).logits
 
-    def loss_func(self, stage, logits, labels, inputs=None, ligands=None, info=None):
+    def loss_func(self, stage, logits, labels, inputs=None, info=None):
         label = labels['labels'].to(logits)
         task_loss = binary_cross_entropy_with_logits(logits, label.float())
         aupr = getattr(self, f"{stage}_aupr")(logits.sigmoid().detach(), label)
 
         loss = task_loss
+
+        if stage == "test" and self.test_result_path is not None:
+            os.makedirs(os.path.dirname(self.test_result_path), exist_ok=True)
+            with open(self.test_result_path, 'a') as w:
+                uniprot_id = info[0]
+                print("label:", label)
+                probs = F.softmax(logits, dim=1).squeeze().tolist()
+                probs_str = "\t".join([f"{p:.4f}" for p in probs])
+                w.write(f"{uniprot_id}\t{probs_str}\t{label.item()}\n")
 
         if stage == "train":
             log_dict = {"train_loss": loss}
