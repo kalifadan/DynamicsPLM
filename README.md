@@ -5,7 +5,7 @@ The repository is the official implementation of the paper: "Learning Protein Re
 The paper is under review for the Nature journal.
 
 ## DynamicsPLM - Overview
-![](figures/DynamicsPLM.pdf)
+![](figures/DynamicsPLM.jpg)
 
 Some code was borrowed from [SaProt](https://github.com/westlake-repl/SaProt) repository, which is our base PLM used by DynamicsPLM. 
 
