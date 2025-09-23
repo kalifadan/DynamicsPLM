@@ -25,7 +25,7 @@ def run(config):
     trainer = load_trainer(config)
 
     # Train and validate
-    # trainer.fit(model=model, datamodule=data_module)
+    trainer.fit(model=model, datamodule=data_module)
 
     # Load best model and test performance
     if model.save_path is not None:
@@ -35,6 +35,7 @@ def run(config):
             model = load_model(config.model)
 
         else:
+            print(f"loading {model.save_path}")
             model.load_checkpoint(model.save_path, load_prev_scheduler=model.load_prev_scheduler)
 
     trainer.test(model=model, datamodule=data_module)
@@ -51,6 +52,7 @@ def main(args):
         config = EasyDict(yaml.safe_load(r))
 
     if config.setting.seed:
+        print("Found seed:", config.setting.seed)
         setup_seed(config.setting.seed)
 
     # set os environment variables

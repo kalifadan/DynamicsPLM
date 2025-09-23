@@ -1,5 +1,6 @@
 LMDB/*
 !LMDB/README
+temp.md
 
 results
 
@@ -94,6 +95,7 @@ Pipfile.lock
 data/
 datasets/
 *.csv
+!clean_clusters_codnasQ.csv
 *.tsv
 *.json
 *.xml

@@ -5,12 +5,12 @@ setting:
     WANDB_RUN_ID: ~
     CUDA_VISIBLE_DEVICES: 0,1,2,3
     MASTER_ADDR: localhost
-    MASTER_PORT: 28624
+    MASTER_PORT: 28628
     WORLD_SIZE: 1
     NODE_RANK: 0
   wandb_config:
     project: EC
-    name: DynamicPLM-SHP-Embedding
+    name: DynamicPLM
 
 model:
 #    Which model to use
@@ -33,7 +33,7 @@ model:
     weight_decay: 0.01
 
   save_path: weights/EC/DynamicPLM_SHP_Embedding.pt
-  test_result_path: results/EC/DynamicPLM.csv
+  test_result_path: results/EC/DynamicPLM_dynamics.csv
 
 dataset:
 #    Arguments to initialize the basic class LMDBDataset
@@ -42,9 +42,9 @@ dataset:
     batch_size: 1
     num_workers: 4
 
-  train_lmdb: LMDB/EC/AF2/dynamic/train
-  valid_lmdb: LMDB/EC/AF2/dynamic/valid
-  test_lmdb: LMDB/EC/AF2/dynamic/test    # TODO: dynamic_only
+  train_lmdb: LMDB/EC/AF2/foldseek/train
+  valid_lmdb: LMDB/EC/AF2/foldseek/valid
+  test_lmdb: LMDB/EC/AF2/dynamic_test
 #    Arguments to initialize the specific class
   kwargs:
     tokenizer: weights/PLMs/SaProt_650M_AF2
@@ -53,7 +53,7 @@ dataset:
 
 #  Arguments to initialize Pytorch Lightning Trainer
 Trainer:
-  max_epochs: 0
+  max_epochs: 100
   log_every_n_steps: 1
   strategy:
     find_unused_parameters: True

@@ -77,7 +77,7 @@ class DynamicPLMPPIModel(SaprotBaseModel):
         hidden_concat = torch.cat([hidden_1, hidden_2], dim=-1)
         return self.model.classifier(hidden_concat)
     
-    def loss_func(self, stage, logits, labels, inputs=None, ligands=None, info=None):
+    def loss_func(self, stage, logits, labels, inputs=None, info=None):
         label = labels['labels']
         task_loss = cross_entropy(logits, label)
         loss = task_loss
@@ -85,11 +85,11 @@ class DynamicPLMPPIModel(SaprotBaseModel):
         if stage == "test" and self.test_result_path is not None:
             os.makedirs(os.path.dirname(self.test_result_path), exist_ok=True)
             with open(self.test_result_path, 'a') as w:
-                uniprot_id_1, protein_type_1 = info["protein_1"][0]
-                uniprot_id_2, protein_type_2 = info["protein_2"][0]
+                uniprot_id_1 = info["protein_1"][0]
+                uniprot_id_2 = info["protein_2"][0]
                 probs = F.softmax(logits, dim=1).squeeze().tolist()
                 probs_str = "\t".join([f"{p:.4f}" for p in probs])
-                w.write(f"{uniprot_id_1}\t{protein_type_1}\t{uniprot_id_2}\t{protein_type_2}\t{probs_str}\t{label.item()}\n")
+                w.write(f"{uniprot_id_1}\t{uniprot_id_2}\t{probs_str}\t{label.item()}\n")
 
         # Update metrics
         # for metric in self.metrics[stage].values():

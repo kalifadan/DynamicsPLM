@@ -35,7 +35,7 @@ class DynamicPLMAnnotationModel(SaprotBaseModel):
 
         self.shp_wrapper = SHPWrapper(self.shp_embedding_layer)
         self.model.esm.embeddings.word_embeddings = self.shp_wrapper
-        
+
     def initialize_metrics(self, stage):
         return {f"{stage}_aupr": torchmetrics.AveragePrecision(pos_label=1, average='micro')}
 
@@ -51,7 +51,6 @@ class DynamicPLMAnnotationModel(SaprotBaseModel):
             shp_logits = torch.tensor(dynamic_features["shp"], dtype=torch.float32, device=inputs["input_ids"].device)
             shp = F.softmax(shp_logits, dim=-1)
             self.shp_wrapper.set_shp_tensor(shp)
-
         else:
             self.shp_wrapper.set_shp_tensor(None)
 
@@ -67,11 +66,15 @@ class DynamicPLMAnnotationModel(SaprotBaseModel):
         if stage == "test" and self.test_result_path is not None:
             os.makedirs(os.path.dirname(self.test_result_path), exist_ok=True)
             with open(self.test_result_path, 'a') as w:
-                uniprot_id = info[0]
-                print("label:", label)
-                probs = F.softmax(logits, dim=1).squeeze().tolist()
-                probs_str = "\t".join([f"{p:.4f}" for p in probs])
-                w.write(f"{uniprot_id}\t{probs_str}\t{label.item()}\n")
+                for b in range(logits.size(0)):  # handle batch size > 1
+                    uniprot_id = info[b]
+                    probs = torch.sigmoid(logits[b]).tolist()
+                    labels_vec = label[b].tolist()
+                    # tab-separated strings
+                    probs_str = "\t".join(f"{p:.4f}" for p in probs)
+                    labels_str = "\t".join(str(int(l)) for l in labels_vec)
+                    # id \t probs \t labels
+                    w.write(f"{uniprot_id}\t{probs_str}\t{labels_str}\n")
 
         if stage == "train":
             log_dict = {"train_loss": loss}
@@ -104,7 +107,7 @@ class DynamicPLMAnnotationModel(SaprotBaseModel):
         
         log_dict = {"valid_f1_max": f1_max,
                     "valid_loss": torch.cat(self.all_gather(outputs), dim=-1).mean(),
-                    # "valid_aupr": aupr
+                    # "valid_aupr": aupr        # Optional
                     }
         
         self.log_info(log_dict)

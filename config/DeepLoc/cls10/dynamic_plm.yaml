@@ -10,7 +10,7 @@ setting:
     NODE_RANK: 0
   wandb_config:
     project: DynamicPLM-DeepLoc_cls10
-    name: DynamicPLM-SHP-Embedding-Gate
+    name: DynamicPLM
 
 model:
 #    Which model to use
@@ -54,7 +54,7 @@ dataset:
 
 #  Arguments to initialize Pytorch Lightning Trainer
 Trainer:
-  max_epochs: 10    # 100
+  max_epochs: 100
   log_every_n_steps: 1
   strategy:
     find_unused_parameters: True

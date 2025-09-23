@@ -85,7 +85,7 @@ class SHPEmbeddingLayer(nn.Module):
         #     nn.Sigmoid()  # Output in (0,1)
         # )
         # self.gate_net[4].bias.data.fill_(-0.85)
-        #
+
         self.avg_gate = 0
 
         # self.cross_attention = nn.MultiheadAttention(

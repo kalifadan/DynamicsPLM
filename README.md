@@ -1,70 +1,87 @@
+# DynamicsPLM: Learning Protein Representations with Conformational Dynamics
+## Dan Kalifa, Eric Horvitz and Kira Radinsky
 
-# TODO SECTION:
-1) Add LMDB to the pip install of rocketshp
+The repository is the official implementation of the paper: "Learning Protein Representations with Conformational Dynamics".
+The paper is under review for the Nature journal.
 
+## DynamicsPLM - Overview
+![](figures/DynamicsPLM.pdf)
 
-# RUN TASKS SECTION:
-python scripts/training.py -c config/Thermostability/dynamic_plm.yaml
-python scripts/training.py -c config/DeepLoc/cls10/dynamic_plm.yaml
-python scripts/training.py -c config/DeepLoc/cls2/dynamic_plm.yaml
-python scripts/training.py -c config/MetalIonBinding/dynamic_plm.yaml
-python scripts/training.py -c config/EC/dynamic_plm.yaml
-python scripts/training.py -c config/GO/CC/dynamic_plm.yaml
-python scripts/training.py -c config/HumanPPI/dynamic_plm.yaml
-python scripts/training.py -c config/HumanPPI/dynamic_plm.yaml
-python scripts/training.py -c config/Contact/dynamic_plm.yaml
-
-# Only Dynamic
-python scripts/training.py -c config/MetalIonBinding/dynamic_only.yaml
-python scripts/training.py -c config/DeepLoc/cls10/dynamic_only.yaml
-python scripts/training.py -c config/DeepLoc/cls2/dynamic_only.yaml
-python scripts/training.py -c config/EC/dynamic_only.yaml
-python scripts/training.py -c config/Thermostability/dynamic_only.yaml
-
-python scripts/training.py -c config/EC/saprot.yaml
-
-
-# ESM-3 Access
-huggingface-cli login
-🔐 Where do you get your token?
-Go to: https://huggingface.co/settings/tokens
-
-
-# Clean
-pkill -u kalifadan python
-pids=$(fuser -v /dev/nvidia* 2>/dev/null | awk '/python/ {print $2}' | sort -u); [ -n "$pids" ] && kill -9 $pids || echo "No GPU Python processes found."
-
-
-# Leaderboard: Leveraging Predictive Modeling for Protein-Ligand Insights and Discovery
-## Dan Kalifa, Kira Radinsky, Eric Horvitz
-
-The repository is the official implementation of the paper: "Leaderboard: Leveraging Predictive Modeling for Protein-Ligand Insights and Discovery".
-The paper is under review for the Bioinformatics journal by Oxford.
-
-## ProtLigand - Pre-training Overview
-![](figures/ProtLigand_New.png)
-
-## ProtLigand - Inference Overview
-An example of using the ProtLigand model for the HumanPPI classification task:
-<img src="figures/ppi_classification-1.png" width="600"/>
-
-Some code was borrowed from [SaProt](https://github.com/westlake-repl/SaProt) repository, which is our base PLM used by ProtLigand. 
+Some code was borrowed from [SaProt](https://github.com/westlake-repl/SaProt) repository, which is our base PLM used by DynamicsPLM. 
 
 ## Environment installation
 ### Create a virtual environment
 ```
-conda create -n ProtLigand python=3.10
-conda activate ProtLigand
+conda create -n DynamicsPLM python=3.10
+conda activate DynamicsPLM
 ```
 ### Install packages
 ```
 bash environment.sh  
 ```
 
-## ProtLigand Usages
+## Prepare the DynamicsPLM model
+### Encoders checkpoints
+The encoder weights are available in [SaProt_650M_AF2](https://huggingface.co/westlake-repl/SaProt_650M_AF2) model.
+After downloading, place these files in the appropriate `weights/PLMs/SaProt_650M_AF2` path.
+Then, in the configs files, we will upload it using the `config_path: weights/PLMs/SaProt_650M_AF2` keyword.
 
-### TBD - Inference 
+### Experimental results
+Some experimental results are listed below. For more details, please refer to our paper. For the fine-tuning tasks, the datasets were split based on 30% sequence identity.
 
+## Prepare dataset
+### Downstream tasks
+We provide the dynamics datasets that are used in the paper. Datasets can be downloaded from 
+[here???](???).
+Once downloaded, the datasets need to be decompressed and placed in the `LMDB` folder for supervised fine-tuning.
+
+We provide option to create the datasets from scratch by downloaded the statics datasets from 
+[here](https://drive.google.com/drive/folders/11dNGqPYfLE3M-Mbh4U7IQpuHxJpuRr4g?usp=sharing), and then following the `main.py` to create the dynamics datasets.
+We use the conformation generator from [RocketSHP](https://github.com/samsledje/RocketSHP/tree/main).
+
+#### Fair evaluation 
+We provide the full benchmark datasets. For each benchmark task, especially new ones, to ensure fair and rigorous evaluation, users must remove any sequence from the pre-training set that exhibits >30% Needleman–Wunsch (NW) similarity to any test sequence before training.
+
+## Encoders and pre-trained embeddings
+To train the SaProt model (the base encoders), you need the pre-training dataset, which can be downloaded from
+[here](https://huggingface.co/datasets/westlake-repl/AF2_UniRef50).
+
+## Conformation Generator
+To train the conformation generator, follow the instruction [here](https://github.com/samsledje/RocketSHP/tree/main).
+This model use ESM-3 model for the structure predictions, therefore you shoule gain access to this model following instructions:
+
+🔐 Where do you get your token for the model?
+Go to: https://huggingface.co/settings/tokens
+Then, in your env enter: `huggingface-cli login`
+
+
+## Train & Fine-tune DynamicsPLM
+We provide a script to training and fine-tuning DynamicsPLM on the benchmark datasets. The following code shows how to fine-tune DynamicsPLM on specific
+downstream tasks. Before running the code, please make sure that the datasets are placed in the `LMDB` folder and the
+pre-trained weights are placed in the `weights/` folder.
+**Note that the default training setting is not the same as in the paper because of the hardware limitation for different users. We recommend that users modify the YAML file flexibly based on their conditions (i.e., batch_size, devices, and accumulate_grad_batches).**
+
+```
+# Fine-tune ProtLigand on the HumanPPI task
+python scripts/training.py -c config/HumanPPI/dynamic_plm.yaml
+```
+
+
+## Test DynamicsPLM on the dynamics subsets of proteins
+To test the DynamicsPLM on the dynamic subset of proteins, you can use the `clean_clusters_codnasQ.csv` file to gets the proteins which meets the dynamics criteria.
+Then, to create a dynamic_test folder and to test the model using the following command:
+
+```
+Testing the DynamicsPLM on the DeepLoc (Subcellular) task, on the dynamics proteins only
+python scripts/training.py -c config/DeepLoc/cls10/dynamic_only.yaml
+```
+
+
+### Record the training process (optional)
+If you want to record the training process using wandb, you could modify the config file and set `Trainer.logger = True`, and then paste your wandb API key in the config key `setting.os_environ.WANDB_API_KEY`.
+
+
+## DynamicsPLM Usages
 
 ### Convert protein structure into structure-aware sequence
 We provide a function to convert a protein structure into a structure-aware sequence. The function calls the 
@@ -85,71 +102,6 @@ print(f"seq: {seq}")
 print(f"foldseek_seq: {foldseek_seq}")
 print(f"combined_seq: {combined_seq}")
 ```
-
-
-
-## Prepare ProtLigand
-### Model checkpoints
-We provide the weights for the [ProtLigand](https://drive.google.com/file/d/1eDy9X_aZnCSlSNNPk8vw0gi9Eu6iSNJY/view?usp=sharing) model, and the [Ligand Generator](https://drive.google.com/file/d/1Oyq4uQYaqeBBsAXedbnUs3YKbXjIQ1TI/view?usp=sharing) model.
-After downloading, place these files in the appropriate `weights/` folder.
-
-### Experimental results
-Some experimental results are listed below. For more details, please refer to our paper. For the fine-tuning tasks, the datasets were split based on 30% sequence identity.
-
-## Prepare dataset
-### Pre-training dataset
-We provide the dataset for pre-training ProtLigand. The dataset can be downloaded from
-[here](https://drive.google.com/file/d/1rGJoLows72n3ShJY7171EEPrR5pm_uZ9/view?usp=sharing).
-Once downloaded, the dataset needs to be decompressed and placed in the `LMDB` folder.
-
-To train the SaProt model (the base PLM), you need the pre-training dataset, which can be downloaded from
-[here](https://huggingface.co/datasets/westlake-repl/AF2_UniRef50).
-
-### Downstream tasks
-We provide datasets that are used in the paper. Datasets can be downloaded from 
-[here](https://drive.google.com/drive/folders/11dNGqPYfLE3M-Mbh4U7IQpuHxJpuRr4g?usp=sharing).
-Once downloaded, the datasets need to be decompressed and placed in the `LMDB` folder for supervised fine-tuning.
-
-#### Fair evaluation 
-We provide a general pre-training dataset and full benchmark datasets. For each benchmark task, especially new ones, to ensure fair and rigorous evaluation, users must remove any sequence from the pre-training set that exhibits >30% Needleman–Wunsch (NW) similarity to any test sequence before training.
-
-## Training ProtLigand
-We provide a script to train the ProtLigand and the Ligand Generator model on the pre-training dataset.
-
-```
-# Training the Ligand Generator
-python scripts/training.py -c config/pretrain/ligand_generator.yaml
-```
-Then, update the ligand generator path in the YAML of the protligand.yaml
-Also, you can train the ligand decoder using this line, with the reported hyperparameters.
-
-```
-# Training ProtLigand model
-python scripts/training.py -c config/pretrain/protligand.yaml
-```
-
-## Fine-tune ProtLigand
-We provide a script to fine-tune ProtLigand on the datasets. The following code shows how to fine-tune ProtLigand on specific
-downstream tasks. Before running the code, please make sure that the datasets are placed in the `LMDB` folder and the
-ProtLigand and Ligand Generator weights are placed in the `weights/Pretrain` folder.
-**Note that the default training setting is not the same as in the paper because of the hardware limitation for different users. We recommend that users modify the YAML file flexibly based on their conditions (i.e., batch_size, devices, and accumulate_grad_batches).**
-
-```
-# Fine-tune ProtLigand on the Thermostability task
-python scripts/training.py -c config/Thermostability/dynamicplm.yaml
-```
-
-### Record the training process (optional)
-If you want to record the training process using wandb, you could modify the config file and set `Trainer.logger = True`, and then paste your wandb API key in the config key `setting.os_environ.WANDB_API_KEY`.
-
-
-## Interpretability of ProtLigand
-ProtLigand supports exporting raw prediction probabilities for downstream analysis or explainability.
-To export raw prediction scores for a given task, specify the output path using the `test_result_path` key in your model configuration file. For example:
-```yaml
-test_result_path: output/HumanPPI/ProtLigand.tsv
-```
-Then, you can use the `explainability.py` script to generate insights, as presented in the paper.
 
 ### Citation
 If you find this repository useful, please cite our paper.

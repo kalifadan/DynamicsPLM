@@ -79,13 +79,13 @@ class DynamicPLMPPIDataset(LMDBDataset):
         tokens = self.tokenizer.tokenize(seq_2)[:self.max_length]
         seq_2 = " ".join(tokens)
 
-        return seq_1, seq_2, int(entry["label"]), dynamic_features
+        return seq_1, seq_2, int(entry["label"]), dynamic_features, entry["name_1"], entry["name_2"]
 
     def __len__(self):
         return int(self._get("length"))
 
     def collate_fn(self, batch):
-        seqs_1, seqs_2, label_ids, dynamic_features = tuple(zip(*batch))
+        seqs_1, seqs_2, label_ids, dynamic_features, info_1, info_2 = tuple(zip(*batch))
 
         label_ids = torch.tensor(label_ids, dtype=torch.long)
         labels = {"labels": label_ids}
@@ -95,5 +95,10 @@ class DynamicPLMPPIDataset(LMDBDataset):
         inputs = {"inputs_1": encoder_info_1,
                   "inputs_2": encoder_info_2}
 
+        info = {
+            "protein_1": info_1,
+            "protein_2": info_2,
+        }
+
         # Batch size is always 1, so we take the [0] element
-        return inputs, labels, dynamic_features[0], None
+        return inputs, labels, dynamic_features[0], info

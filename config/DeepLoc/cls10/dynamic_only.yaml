@@ -10,7 +10,7 @@ setting:
     NODE_RANK: 0
   wandb_config:
     project: DynamicPLM-DeepLoc_cls10
-    name: DynamicPLM-SHP-Embedding
+    name: DynamicPLM
 
 model:
 #    Which model to use
@@ -32,11 +32,8 @@ model:
     betas: [0.9, 0.98]
     weight_decay: 0.01
 
-  save_path: weights/DeepLoc/cls10/SaProt_650M_AF2.pt
-  test_result_path: results/DeepLoc/cls10/SaProt.csv
-
-#  save_path: weights/DeepLoc/cls10/DynamicPLM_SHP_Embedding_Gate.pt
-#  test_result_path: results/DeepLoc/cls10/DynamicPLM.csv
+  save_path: weights/DeepLoc/cls10/DynamicPLM_SHP_Embedding_Gate.pt
+  # test_result_path: results/DeepLoc/cls10/DynamicPLM.csv
 
 dataset:
 #    Arguments to initialize the basic class LMDBDataset
@@ -47,7 +44,7 @@ dataset:
 
   train_lmdb: LMDB/DeepLoc/cls10/dynamic/train
   valid_lmdb: LMDB/DeepLoc/cls10/dynamic/valid
-  test_lmdb: LMDB/DeepLoc/cls10/dynamic/test      # TODO: dynamic_only
+  test_lmdb: LMDB/DeepLoc/cls10/dynamic_test
 
   #    Arguments to initialize the specific class
   kwargs:
@@ -58,7 +55,7 @@ dataset:
 
 #  Arguments to initialize Pytorch Lightning Trainer
 Trainer:
-  max_epochs: 0    # 100
+  max_epochs: 100
   log_every_n_steps: 1
   strategy:
     find_unused_parameters: True
