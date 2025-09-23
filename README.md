@@ -63,7 +63,7 @@ pre-trained weights are placed in the `weights/` folder.
 **Note that the default training setting is not the same as in the paper because of the hardware limitation for different users. We recommend that users modify the YAML file flexibly based on their conditions (i.e., batch_size, devices, and accumulate_grad_batches).**
 
 ```
-# Fine-tune ProtLigand on the HumanPPI task
+# Fine-tune DynamicsPLM on the HumanPPI task
 python scripts/training.py -c config/HumanPPI/dynamic_plm.yaml
 ```
 
@@ -73,7 +73,7 @@ To test the DynamicsPLM on the dynamic subset of proteins, you can use the `clea
 Then, to create a dynamic_test folder and to test the model using the following command:
 
 ```
-Testing the DynamicsPLM on the DeepLoc (Subcellular) task, on the dynamics proteins only
+# Testing the DynamicsPLM on the DeepLoc (Subcellular) task, on the dynamics proteins only
 python scripts/training.py -c config/DeepLoc/cls10/dynamic_only.yaml
 ```
 
@@ -82,7 +82,7 @@ python scripts/training.py -c config/DeepLoc/cls10/dynamic_only.yaml
 If you want to record the training process using wandb, you could modify the config file and set `Trainer.logger = True`, and then paste your wandb API key in the config key `setting.os_environ.WANDB_API_KEY`.
 
 
-## DynamicsPLM Usages
+## Additional Helpers
 
 ### Convert protein structure into structure-aware sequence
 We provide a function to convert a protein structure into a structure-aware sequence. The function calls the 
@@ -104,5 +104,5 @@ print(f"foldseek_seq: {foldseek_seq}")
 print(f"combined_seq: {combined_seq}")
 ```
 
-### Citation
+## Citation
 If you find this repository useful, please cite our paper.
