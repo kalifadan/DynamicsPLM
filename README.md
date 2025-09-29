@@ -42,20 +42,6 @@ We use the conformation generator from [RocketSHP](https://github.com/samsledje/
 #### Fair evaluation 
 We provide the full benchmark datasets. For each benchmark task, especially new ones, to ensure fair and rigorous evaluation, users must remove any sequence from the pre-training set that exhibits >30% Needleman–Wunsch (NW) similarity to any test sequence before training.
 
-## Model Components
-### Encoders and pre-trained embeddings
-To train the SaProt model (the base encoders), you need the pre-training dataset, which can be downloaded from
-[here](https://huggingface.co/datasets/westlake-repl/AF2_UniRef50).
-
-### Conformation Generator
-To train the conformation generator, follow the instruction [here](https://github.com/samsledje/RocketSHP/tree/main).
-This model use ESM-3 model for the structure predictions, therefore you should gain access to this model following instructions:
-
-1) Get a token for access the model - 🔐 Where do you get your token for the model?
-Go to: https://huggingface.co/settings/tokens.
-2) In your env enter: `huggingface-cli login`
-
-
 ## Train & Fine-tune DynamicsPLM
 We provide a script to training and fine-tuning DynamicsPLM on the benchmark datasets. The following code shows how to fine-tune DynamicsPLM on specific
 downstream tasks. Before running the code, please make sure that the datasets are placed in the `LMDB` folder and the
@@ -82,7 +68,7 @@ python scripts/training.py -c config/DeepLoc/cls10/dynamic_only.yaml
 If you want to record the training process using wandb, you could modify the config file and set `Trainer.logger = True`, and then paste your wandb API key in the config key `setting.os_environ.WANDB_API_KEY`.
 
 
-## Additional Helpers
+## Additional Usages
 
 ### Convert protein structure into structure-aware sequence
 We provide a function to convert a protein structure into a structure-aware sequence. The function calls the 
@@ -103,6 +89,22 @@ print(f"seq: {seq}")
 print(f"foldseek_seq: {foldseek_seq}")
 print(f"combined_seq: {combined_seq}")
 ```
+
+### Reproduce pre-trained embeddings or changing the base encoder
+To train the SaProt model (the base encoders), you need the pre-training dataset, which can be downloaded from
+[here](https://huggingface.co/datasets/westlake-repl/AF2_UniRef50).
+
+### Conformation generator
+To train the conformation generator, follow the instruction [here](https://github.com/samsledje/RocketSHP/tree/main).
+This model use ESM-3 model for the structure predictions, therefore you should gain access to this model following instructions:
+
+1) Get a token for access the model using the link: https://huggingface.co/settings/tokens, and the ESM-3 online web.
+2) Then, in your env enter: `huggingface-cli login`
+
+### Bioemu Generator
+For using other generators, such as Biomolecular Emulator (BioEmu), follow  the instruction [here](https://github.com/microsoft/bioemu).
+Here, you will find the required pip installation and the code required for generating conformations for each protein.
+Using our 'main.py' file you could switch the RocketSHP predictions with once from BioEmu.
 
 ## Citation
 If you find this repository useful, please cite our paper.
