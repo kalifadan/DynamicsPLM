@@ -10,6 +10,7 @@ from pathlib import Path
 import math
 import pandas as pd
 import re
+import time
 
 # If not wanting to generate conformations or creating ablations (such the BioEmu ablation) - comments these lines
 from rocketshp import RocketSHP, load_sequence, load_structure
@@ -21,6 +22,7 @@ import biotite.structure as struc
 import biotite.structure.io.pdb as pdb
 from utils.foldseek_util import get_struc_seq
 from collections import Counter
+
 
 THREEDI_ALPHABET = list("ABCDEFGHIJKLMNOPQRST")
 THREEDI_INDEX = {c: i for i, c in enumerate(THREEDI_ALPHABET)}
@@ -311,84 +313,127 @@ def create_humanppi_dataset_from_lmdb(path):
 #         print(f"💾 Saved Multi-conformation only dataset!")
 
 
+_HAS_BIOTITE = True
+
+_AA1TO3_FALLBACK = {
+    "A":"ALA","C":"CYS","D":"ASP","E":"GLU","F":"PHE",
+    "G":"GLY","H":"HIS","I":"ILE","K":"LYS","L":"LEU",
+    "M":"MET","N":"ASN","P":"PRO","Q":"GLN","R":"ARG",
+    "S":"SER","T":"THR","V":"VAL","W":"TRP","Y":"TYR",
+    "X":"GLY","U":"SEC","O":"PYL"
+}
+
+
+def _aa1_to_aa3_array(aa_1letter_iterable):
+    if _HAS_BIOTITE and hasattr(struc, "AMINO_ACIDS_1TO3"):
+        m = struc.AMINO_ACIDS_1TO3
+        return np.array([m.get(a.upper(), "GLY") for a in aa_1letter_iterable], dtype="U3")
+    return np.array([_AA1TO3_FALLBACK.get(a.upper(), "GLY") for a in aa_1letter_iterable], dtype="U3")
+
+
+def _coerce_sequence_to_1letter(seq_obj):
+    # str
+    if isinstance(seq_obj, str):
+        return seq_obj
+    # bytes
+    if isinstance(seq_obj, (bytes, bytearray)):
+        return bytes(seq_obj).decode("utf-8")
+    # list/tuple
+    if isinstance(seq_obj, (list, tuple)):
+        if len(seq_obj) == 1 and isinstance(seq_obj[0], str) and len(seq_obj[0]) > 1:
+            return seq_obj[0]
+        return "".join(str(x) for x in seq_obj)
+
+    arr = np.asarray(seq_obj)
+    # integer indices
+    if arr.dtype.kind in ("i", "u"):
+        if _HAS_BIOTITE and hasattr(struc, "aaindex_to_aa"):
+            return "".join(struc.aaindex_to_aa(int(i)) for i in arr.reshape(-1))
+        raise TypeError("Sequence is integer indices but no aaindex_to_aa() available.")
+    # strings/bytes/object arrays
+    if arr.dtype.kind in ("U", "S", "O"):
+        arr = arr.squeeze()
+        if arr.shape == ():
+            return str(arr.item())
+        if arr.shape == (1,):
+            return str(arr[0])
+        tokens = [str(x) for x in arr.tolist()]
+        # join tokens (works for 1-letter tokens or a single full string split up)
+        return "".join(tokens)
+    raise TypeError(f"Unsupported sequence dtype/shape: dtype={arr.dtype}, shape={arr.shape}")
+
+
+def _format_atom_line(serial, res3, chain_id, resseq, x, y, z, occ=1.00, b=0.00, element="C"):
+    # PDB ATOM line (columns per PDB spec, CA only)
+    # 1-6  "ATOM  "
+    # 7-11 serial, 13-16 atom name, 18 altLoc, 18-20 resName, 22 chainID,
+    # 23-26 resSeq, 31-38 x, 39-46 y, 47-54 z, 55-60 occ, 61-66 temp
+    return (
+        f"ATOM  {serial:5d}  CA  {res3:>3s} {chain_id}{resseq:4d}    "
+        f"{x:8.3f}{y:8.3f}{z:8.3f}{occ:6.2f}{b:6.2f}          {element:>2s}\n"
+    )
+
+
+def _write_pdb(out_pdb: Path, coords_models, res3, chain_id="A", start_res_id=1):
+    """
+    coords_models : list of np.ndarray, each (L,3) for one model
+    res3          : array of len L with 3-letter codes
+    """
+    out_pdb.parent.mkdir(parents=True, exist_ok=True)
+    with open(out_pdb, "w", encoding="utf-8", newline="\n") as f:
+        atom_serial = 1
+        for m_idx, coords in enumerate(coords_models):
+            if len(coords_models) > 1:
+                f.write(f"MODEL     {m_idx+1:4d}\n")
+            L = coords.shape[0]
+            # sanitize coords
+            coords = np.asarray(coords, dtype=float)
+            coords = np.where(np.isfinite(coords), coords, 0.0)
+
+            for i in range(L):
+                x, y, z = coords[i]
+                resseq = start_res_id + i
+                f.write(_format_atom_line(atom_serial, res3[i], chain_id, resseq, x, y, z))
+                atom_serial += 1
+
+            if len(coords_models) > 1:
+                f.write("ENDMDL\n")
+        f.write("END\n")
+
+
 def npz_to_pdb(npz_path: Path, out_pdb: Path, chain_id="A"):
+    """
+    Convert BioEmu NPZ (expects keys: 'pos', 'sequence') to CA-only PDB.
+    - pos: (L,3) or (K,L,3)
+    - sequence: str / 1-element array[str] / list[str] / int indices (if Biotite available)
+    """
     data = np.load(npz_path, allow_pickle=True)
+    if "pos" not in data or "sequence" not in data:
+        raise KeyError(f"{npz_path} must contain 'pos' and 'sequence'")
 
-    def _write_ca(coords_ca, aatype=None, res_idx=None):
-        L = coords_ca.shape[0]
-        if res_idx is None:
-            res_idx = np.arange(1, L+1, dtype=int)
-        if aatype is None:
-            # default to GLY for all if not provided; just for PDB header
-            res3 = ["GLY"] * L
-        else:
-            if aatype.dtype.kind in "SU":
-                # string codes; normalize to 3-letter
-                res3 = []
-                for a in aatype:
-                    if len(a) == 1:
-                        res3.append(struc.AMINO_ACIDS_1TO3.get(a, "UNK"))
-                    else:
-                        res3.append(a if len(a)==3 else "UNK")
-            else:
-                # integer indices → 1-letter → 3-letter
-                res3 = [struc.AMINO_ACIDS_1TO3[struc.aaindex_to_aa(int(a))] for a in aatype]
+    pos = np.asarray(data["pos"])
+    seq_1 = _coerce_sequence_to_1letter(data["sequence"])
+    L = len(seq_1)
 
-        arr = struc.AtomArray(L)
-        arr.coord = coords_ca
-        arr.atom_name = np.array(["CA"]*L)
-        arr.res_name = np.array(res3)
-        arr.chain_id = np.array([chain_id]*L)
-        arr.res_id = res_idx.astype(int)
-        arr.element = np.array(["C"]*L)
-        out_pdb.parent.mkdir(parents=True, exist_ok=True)
-        pdb.PDBFile.write(out_pdb, arr)
+    # Validate shapes and collect models
+    if pos.ndim == 2:
+        if pos.shape != (L, 3):
+            raise ValueError(f"'pos' shape {pos.shape} does not match sequence length {L}")
+        coords_models = [pos]
+    elif pos.ndim == 3:
+        K, Lp, D = pos.shape
+        if (Lp, D) != (L, 3):
+            raise ValueError(f"'pos' shape {pos.shape} does not match (L,3) with L={L}")
+        coords_models = [pos[k] for k in range(K)]
+    else:
+        raise ValueError(f"Unsupported 'pos' ndim={pos.ndim}; expected (L,3) or (K,L,3)")
 
-    # 1) AlphaFold-style: atom_positions [L,37,3]
-    if "atom_positions" in data:
-        pos37 = data["atom_positions"]
-        aatype = data.get("aatype")
-        res_idx = data.get("residue_index")
-        _write_ca(pos37[:, 1, :], aatype=aatype, res_idx=res_idx)
-        return True
+    # Map sequence to 3-letter names
+    res3 = _aa1_to_aa3_array(list(seq_1))
 
-    # 2) Alternative name: atom37_positions
-    if "atom37_positions" in data:
-        pos37 = data["atom37_positions"]
-        aatype = data.get("aatype")
-        res_idx = data.get("residue_index")
-        _write_ca(pos37[:, 1, :], aatype=aatype, res_idx=res_idx)
-        return True
-
-    # 3) Backbone arrays (N/CA/C)
-    if "CA" in data:
-        coords_ca = data["CA"]
-        aatype = data.get("aatype")
-        res_idx = data.get("residue_index")
-        _write_ca(coords_ca, aatype=aatype, res_idx=res_idx)
-        return True
-
-    # 4) Last resort: packed atoms with names
-    if "atom_names" in data and "atom_coords" in data:
-        # Expect shapes [L,A] and [L,A,3]
-        names = data["atom_names"]
-        coords = data["atom_coords"]
-        # find CA index per residue
-        ca_coords = []
-        for r in range(coords.shape[0]):
-            row_names = names[r]
-            idxs = np.where(row_names == "CA")[0]
-            if len(idxs) == 0:
-                # cannot salvage this residue
-                return False
-            ca_coords.append(coords[r, idxs[0], :])
-        coords_ca = np.stack(ca_coords, axis=0)
-        aatype = data.get("aatype")
-        res_idx = data.get("residue_index")
-        _write_ca(coords_ca, aatype=aatype, res_idx=res_idx)
-        return True
-
-    return False
+    # Write plain-text PDB
+    _write_pdb(out_pdb, coords_models, res3, chain_id=chain_id)
+    return True
 
 
 # Example: iterate all NPZ shards for a protein
@@ -457,8 +502,6 @@ def build_shp_like_from_npz_shards(npz_dir, out_dir, foldseek_bin="bin/foldseek"
 
 def create_dataset_with_bioemu_from_lmdb(path):
     device = torch.device("cuda:0")
-    model = RocketSHP.load_from_checkpoint("v1", strict=False).to(device)
-
     entries = []
     with lmdb.open(path, readonly=True, lock=False) as env:
         with env.begin() as txn:
@@ -480,41 +523,38 @@ def create_dataset_with_bioemu_from_lmdb(path):
 
                         # Load structure file (PDB)
                         structure = pdb.PDBFile.read(save_path).get_structure()
-                        struct_features = load_structure(structure, device=device)
-
-                        # Get sequence from structure
                         sequence = str(to_sequence(structure)[0][0])
-                        seq_features = load_sequence(sequence, device=device)
 
                         path_bioemu = f'/home/kalifadan/DynamicsPLM/bioemu/{uniprot_id}'
-                        if not os.path.exists(path_bioemu):
+                        if os.path.exists(path_bioemu) and len(sorted(Path(path_bioemu).glob("*.npz"))) > 0:
+                            print(f"skip sample structures for protein {uniprot_id}")
+                        else:
                             sample(sequence=sequence, num_samples=10, output_dir=path_bioemu)
+                            time.sleep(0.1)
 
                         path_bioemu = Path(path_bioemu)
-                        pdb_frames = sorted(path_bioemu.glob("*.pdb"))
+                        npz_list = sorted(path_bioemu.glob("batch_*.npz"))
+                        if len(npz_list) == 0:
+                            print("No BioEmu outputs found.")
+                            entries.append(data)
+                            continue
 
-                        # If none, convert NPZ shards to PDBs
+                        out_pdb_dir = path_bioemu / "pdb_frames"
+                        out_pdb_dir.mkdir(exist_ok=True, parents=True)
+                        for npz_path in npz_list:
+                            out_pdb = out_pdb_dir / f"{npz_path.stem}.pdb"
+                            if not out_pdb.exists():
+                                ok = npz_to_pdb(npz_path, out_pdb)
+                                if not ok:
+                                    # if we cannot find CA or schema unsupported, skip this shard
+                                    continue
+                        pdb_frames = sorted(out_pdb_dir.glob("*.pdb"))
                         if len(pdb_frames) == 0:
-                            npz_list = sorted(path_bioemu.glob("batch_*.npz"))
-                            if len(npz_list) == 0:
-                                data.setdefault("errors", []).append("No BioEmu outputs found.")
-                                entries.append(data);
-                                continue
-                            out_pdb_dir = path_bioemu / "pdb_frames"
-                            out_pdb_dir.mkdir(exist_ok=True, parents=True)
-                            for npz_path in npz_list:
-                                out_pdb = out_pdb_dir / f"{npz_path.stem}.pdb"
-                                if not out_pdb.exists():
-                                    ok = npz_to_pdb(npz_path, out_pdb)
-                                    if not ok:
-                                        # if we cannot find CA or schema unsupported, skip this shard
-                                        continue
-                            pdb_frames = sorted(out_pdb_dir.glob("*.pdb"))
-                            if len(pdb_frames) == 0:
-                                data.setdefault("errors", []).append(
-                                    "NPZ→PDB conversion failed (no CA/backbone found).")
-                                entries.append(data)
-                                continue
+                            print("NPZ→PDB conversion failed (no CA/backbone found).")
+                            entries.append(data)
+                            continue
+                        else:
+                            print(f"Found {len(pdb_frames)} valid pdb frames for {uniprot_id}")
 
                         # Foldseek tokenization for each frame
                         token_strs = []
@@ -529,7 +569,7 @@ def create_dataset_with_bioemu_from_lmdb(path):
                                 continue
 
                         if len(token_strs) == 0:
-                            data.setdefault("errors", []).append("Foldseek tokenization produced no sequences.")
+                            print("Foldseek tokenization produced no sequences.")
                             entries.append(data)
                             continue
 
@@ -546,10 +586,9 @@ def create_dataset_with_bioemu_from_lmdb(path):
                                 probs = np.vstack([probs, pad])
 
                         data["shp"] = probs.astype(np.float16).tolist()
-                        data["K"] = int(probs.shape[1])
-                        data["L"] = int(L)
-                        data["shp_source"] = "bioemu"
+                        print(f"Success producing shp for {uniprot_id}")
 
+                        data["shp_source"] = "bioemu"
                         entries.append(data)
 
                 except Exception as e:
@@ -559,7 +598,7 @@ def create_dataset_with_bioemu_from_lmdb(path):
     return entries
 
 
-for task in ["MetalIonBinding/AF2"]:        # for example: "DeepLoc/cls10", "EC/AF2"]:
+for task in ["MetalIonBinding/AF2", "DeepLoc/cls10", "EC/AF2"]:
     for split in ["test", "valid", "train"]:
         lmdb_path = f"LMDB/{task}/foldseek/{split}"
         print(f"\n🔄 Processing {task} {split} set from {lmdb_path}...")
