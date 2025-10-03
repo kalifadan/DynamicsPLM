@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from typing import List, Dict
+from typing import List, Dict, Optional
 # from data.pdb2feature import batch_coords2feature
 from transformers import EsmConfig, EsmTokenizer, EsmForMaskedLM, EsmForSequenceClassification
 # from module.esm.structure_module import (
@@ -114,7 +114,6 @@ class SHPEmbeddingLayer(nn.Module):
 
         # Fast fallback mode (no SHP): just use pretrained embeddings
         if shp_tensor is None:
-            print("Got None SHP vector!")
             flat_input = input_ids.view(-1)
             flat_embed = torch.stack([self.embed_token_by_id(tok.item()) for tok in flat_input])
             return flat_embed.view(B, L, D)
@@ -134,8 +133,10 @@ class SHPEmbeddingLayer(nn.Module):
             output[special_mask] = self.special_embedding[special_positions[special_mask]]
 
         # Regular tokens
-        shp_len = shp_tensor.shape[1]
+        # shp_len = shp_tensor.shape[1]
+        shp_len = shp_tensor.size(1) if shp_tensor.dim() == 3 else shp_tensor.size(0)
         max_shp_len = min(shp_len, L - 2)  # skip CLS/EOS
+
         if max_shp_len <= 0:
             return output
 
@@ -156,7 +157,13 @@ class SHPEmbeddingLayer(nn.Module):
                 reg_i_list.append(b)
                 reg_j_list.append(j)
                 seq_ids.append(self.seq_vocab_map[seq_tok])
-                shp_vals.append(shp_tensor[b, offset])
+
+                # shp_vals.append(shp_tensor[b, offset])
+                if shp_tensor.dim() == 3:  # (B, L, 20)
+                    shp_vals.append(shp_tensor[b, offset, :])  # (20,)
+                else:  # (L, 20)
+                    shp_vals.append(shp_tensor[offset, :])  # (20,)
+
                 E_token_list.append(self.embed_token_by_id(token_id))
 
         if not reg_i_list:
@@ -181,7 +188,6 @@ class SHPEmbeddingLayer(nn.Module):
         # if self.training:  # Only log during training
         #     self.avg_gate = gate.mean().item()
 
-        # SHP values used to modulate VALUE — not key/query
         # value = struct_embeds * shp_vals.unsqueeze(-1)  # (N, 20, D)
         # key = struct_embeds  # (N, 20, D)
         # query = E_token.unsqueeze(1)  # (N, 1, D)

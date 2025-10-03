@@ -11,6 +11,7 @@ import math
 import pandas as pd
 import re
 import time
+import torch.nn.functional as F
 
 # If not wanting to generate conformations or creating ablations (such the BioEmu ablation) - comments these lines
 from rocketshp import RocketSHP, load_sequence, load_structure
@@ -22,10 +23,6 @@ import biotite.structure as struc
 import biotite.structure.io.pdb as pdb
 from utils.foldseek_util import get_struc_seq
 from collections import Counter
-
-
-THREEDI_ALPHABET = list("ABCDEFGHIJKLMNOPQRST")
-THREEDI_INDEX = {c: i for i, c in enumerate(THREEDI_ALPHABET)}
 
 
 def read_from_lmdb(filename):
@@ -477,6 +474,38 @@ def tokens_to_distribution(token_strs, eps=1e-3):
     return probs.astype(np.float32), np.array(THREEDI_ALPHABET)
 
 
+THREEDI_ALPHABET = [*'ABCDEFGHIJKLMNOPQRST']  # your fixed order
+THREEDI_INDEX = {c:i for i,c in enumerate(THREEDI_ALPHABET)}
+
+
+def tokens_to_head_weights(token_strs, eps=1e-3):
+    """
+    token_strs: list of K strings (one per head/frame), each length L, chars in A..T
+    returns:
+      shp  : (L, K)   per-residue weights aligned to heads
+      probs: (L, 20)  per-residue 3Di distributions (for debugging/optional use)
+    """
+    assert len(token_strs) > 0
+    L = len(token_strs[0])
+    assert all(len(s) == L for s in token_strs), "Inconsistent token lengths"
+
+    # (L,20) distribution in fixed alphabet order
+    probs, _ = tokens_to_distribution(token_strs, eps=eps)  # your function
+
+    K = len(token_strs)
+    shp = np.full((L, K), fill_value=eps/20.0, dtype=np.float32)  # tiny default
+
+    # Gather P(token produced by head k at position i)
+    for k, s in enumerate(token_strs):
+        for i, c in enumerate(s):
+            j = THREEDI_INDEX.get(c.upper(), None)
+            if j is not None:
+                shp[i, k] = probs[i, j]
+    # Optional: normalize per-position so head weights sum to 1
+    shp = shp / (shp.sum(axis=1, keepdims=True) + 1e-8)
+    return shp, probs
+
+
 def build_shp_like_from_npz_shards(npz_dir, out_dir, foldseek_bin="bin/foldseek", chain="A"):
     npz_dir, out_dir = Path(npz_dir), Path(out_dir)
     pdb_dir = out_dir / "pdb_frames"
@@ -498,6 +527,9 @@ def build_shp_like_from_npz_shards(npz_dir, out_dir, foldseek_bin="bin/foldseek"
     probs, alphabet = tokens_to_distribution(token_strs)
     np.savez(shp_dir / "shp_like.npz", probs=probs, alphabet=np.array(alphabet))
     return probs, alphabet
+
+
+TARGET_K = 20
 
 
 def create_dataset_with_bioemu_from_lmdb(path):
@@ -574,20 +606,27 @@ def create_dataset_with_bioemu_from_lmdb(path):
                             continue
 
                         # Aggregate to LxK distribution
-                        probs, alphabet = tokens_to_distribution(token_strs)
-                        # (Optional) enforce same L as input sequence by trimming/padding if needed
+                        shp, probs = tokens_to_head_weights(token_strs, eps=1e-3)  # shp: (L, K), probs: (L,20)
+
+                        K_obs = shp.shape[1]
+                        if K_obs < TARGET_K:
+                            pad = np.full((shp.shape[0], TARGET_K - K_obs), 1e-6, dtype=shp.dtype)  # tiny mass
+                            shp = np.concatenate([shp, pad], axis=1)
+                        elif K_obs > TARGET_K:
+                            shp = shp[:, :TARGET_K]
+
+                        shp = shp / (shp.sum(axis=1, keepdims=True) + 1e-8)
+
+                        # Ensure same L as sequence (you already have this logic)
                         L = len(sequence)
-                        if probs.shape[0] != L:
-                            # simple trim/pad; you may want a smarter alignment if mismatched
-                            if probs.shape[0] > L:
-                                probs = probs[:L]
+                        if shp.shape[0] != L:
+                            if shp.shape[0] > L:
+                                shp = shp[:L]
                             else:
-                                pad = np.tile(probs[-1:], (L - probs.shape[0], 1))
-                                probs = np.vstack([probs, pad])
+                                pad = np.tile(shp[-1:], (L - shp.shape[0], 1))
+                                shp = np.vstack([shp, pad])
 
-                        data["shp"] = probs.astype(np.float16).tolist()
-                        print(f"Success producing shp for {uniprot_id}")
-
+                        data["shp"] = shp.astype(np.float16).tolist()
                         data["shp_source"] = "bioemu"
                         entries.append(data)
 
@@ -599,8 +638,8 @@ def create_dataset_with_bioemu_from_lmdb(path):
 
 
 for task in ["MetalIonBinding/AF2", "DeepLoc/cls10", "EC/AF2"]:
-    for split in ["test", "valid", "train"]:
-        lmdb_path = f"LMDB/{task}/foldseek/{split}"
+    for split in ["train", "valid", "test"]:
+        lmdb_path = f"LMDB/{task}/dynamic_bioemu/{split}"
         print(f"\n🔄 Processing {task} {split} set from {lmdb_path}...")
 
         dataset_entries = create_dataset_with_bioemu_from_lmdb(lmdb_path)
