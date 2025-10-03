@@ -639,7 +639,7 @@ def create_dataset_with_bioemu_from_lmdb(path):
 
 for task in ["MetalIonBinding/AF2", "DeepLoc/cls10", "EC/AF2"]:
     for split in ["train", "valid", "test"]:
-        lmdb_path = f"LMDB/{task}/dynamic_bioemu/{split}"
+        lmdb_path = f"LMDB/{task}/foldseek/{split}"
         print(f"\n🔄 Processing {task} {split} set from {lmdb_path}...")
 
         dataset_entries = create_dataset_with_bioemu_from_lmdb(lmdb_path)
