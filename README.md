@@ -2,7 +2,7 @@
 ## Dan Kalifa, Eric Horvitz and Kira Radinsky
 
 The repository is the official implementation of the paper: "Learning Protein Representations with Conformational Dynamics".
-The paper is under review for the Science journal.
+The paper is under review for the Nature Computational Science journal.
 
 ## DynamicsPLM - Overview
 ![](figures/DynamicsPLM.jpg)
