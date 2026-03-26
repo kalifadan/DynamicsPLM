@@ -24,18 +24,18 @@ bash environment.sh
 ### Encoders checkpoints
 The encoder weights are available in [SaProt_650M_AF2](https://huggingface.co/westlake-repl/SaProt_650M_AF2) model.
 After downloading, place these files in the appropriate `weights/PLMs/SaProt_650M_AF2` path.
-Then, in the configs files, we will upload it using the `config_path: weights/PLMs/SaProt_650M_AF2` keyword.
+Then, in the config files, we will upload it using the `config_path: weights/PLMs/SaProt_650M_AF2` keyword.
 
 ### Experimental results
 Some experimental results are listed below. For more details, please refer to our paper. For the fine-tuning tasks, the datasets were split based on 30% sequence identity.
 
 ## Prepare dataset
 ### Downstream tasks
-We provide the dynamics datasets that are used in the paper. Datasets can be downloaded from 
+We provide the dynamic datasets that are used in the paper. Datasets can be downloaded from 
 [here](https://drive.google.com/file/d/1TmRG1yrP3oJQEEj8jlgpeI8dfH_GoUvm/view?usp=sharing).
 Once downloaded, the datasets need to be decompressed and placed in the `LMDB` folder for supervised fine-tuning.
 
-We provide option to create the datasets from scratch by downloaded the statics datasets from 
+We provide an option to create the datasets from scratch by downloading the statics datasets from 
 [here](https://drive.google.com/drive/folders/11dNGqPYfLE3M-Mbh4U7IQpuHxJpuRr4g?usp=sharing), and then following the `main.py` to create the dynamics datasets.
 We use the conformation generator from [RocketSHP](https://github.com/samsledje/RocketSHP/tree/main).
 
@@ -43,10 +43,10 @@ We use the conformation generator from [RocketSHP](https://github.com/samsledje/
 We provide the full benchmark datasets. For each benchmark task, especially new ones, to ensure fair and rigorous evaluation, users must remove any sequence from the pre-training set that exhibits >30% Needleman–Wunsch (NW) similarity to any test sequence before training.
 
 ## Train & Fine-tune DynamicsPLM
-We provide a script to training and fine-tuning DynamicsPLM on the benchmark datasets. The following code shows how to fine-tune DynamicsPLM on specific
+We provide a script for training and fine-tuning DynamicsPLM on the benchmark datasets. The following code shows how to fine-tune DynamicsPLM on specific
 downstream tasks. Before running the code, please make sure that the datasets are placed in the `LMDB` folder and the
 pre-trained weights are placed in the `weights/` folder.
-**Note that the default training setting is not the same as in the paper because of the hardware limitation for different users. We recommend that users modify the YAML file flexibly based on their conditions (i.e., batch_size, devices, and accumulate_grad_batches).**
+**Note that the default training setting is not the same as in the paper because of the hardware limitations for different users. We recommend that users modify the YAML file flexibly based on their conditions (i.e., batch_size, devices, and accumulate_grad_batches).**
 
 ```
 # Fine-tune DynamicsPLM on the HumanPPI task
@@ -55,7 +55,7 @@ python scripts/training.py -c config/HumanPPI/dynamic_plm.yaml
 
 
 ## Test DynamicsPLM on the dynamics subsets of proteins
-To test the DynamicsPLM on the dynamic subset of proteins, you can use the `clean_clusters_codnasQ.csv` file to gets the proteins which meets the dynamics criteria.
+To test the DynamicsPLM on the dynamic subset of proteins, you can use the `clean_clusters_codnasQ.csv` file to get the proteins that meet the dynamics criteria.
 Then, to create a dynamic_test folder and to test the model using the following command:
 
 ```
